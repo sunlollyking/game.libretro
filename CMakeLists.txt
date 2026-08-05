@@ -7,6 +7,7 @@ find_package(Kodi REQUIRED)
 find_package(LibretroCommon REQUIRED)
 find_package(TinyXML REQUIRED)
 find_package(Rcheevos REQUIRED)
+add_definitions(-DRC_STATIC)
 
 include_directories(${KODI_INCLUDE_DIR}
                     ${KODI_INCLUDE_DIR}/..

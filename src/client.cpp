@@ -19,6 +19,7 @@
 
 #include "client.h"
 
+#include <cstring>
 #include <set>
 #include <string>
 #include <vector>
@@ -27,6 +28,71 @@ using namespace LIBRETRO;
 
 #define GAME_CLIENT_NAME_UNKNOWN      "Unknown libretro core"
 #define GAME_CLIENT_VERSION_UNKNOWN   "0.0.0"
+
+namespace
+{
+/*!
+ * \brief Layout of a savestate that carries achievement progress
+ *
+ *   [ emulator state ][ achievement progress ][ footer ]
+ *
+ * rc_client keeps its own view of how far along each achievement's trigger is.
+ * Rewinding or loading a savestate moves emulator memory backwards without
+ * moving that view, which lets a partially-satisfied trigger stay satisfied
+ * across a rewind and fire on a run that didn't earn it. Saving the progress
+ * alongside the emulator state keeps the two in step.
+ *
+ * The footer sits at the very end rather than the front so that savestates
+ * written before this existed stay loadable: their trailing bytes won't match
+ * the magic, and the blob is then treated as emulator state in its entirety.
+ */
+constexpr uint8_t SAVESTATE_MAGIC[4] = {'K', 'R', 'A', '1'};
+constexpr uint32_t SAVESTATE_VERSION = 2;
+
+struct SavestateFooter
+{
+  uint8_t magic[4];
+  uint32_t version;
+
+  /*!
+   * \brief Length of the emulator state at the front of the blob
+   *
+   * Recorded explicitly rather than derived from the other sizes. The space
+   * reserved for progress is usually larger than what the runtime writes, so
+   * the leftover sits between the progress data and this footer - deriving the
+   * emulator state's length from the total would silently include that gap and
+   * hand the core a longer buffer than it saved.
+   */
+  uint64_t coreSize;
+
+  /// \brief Length of the achievement progress that follows the emulator state
+  uint64_t progressSize;
+};
+
+static_assert(sizeof(SavestateFooter) == 24, "SavestateFooter must not carry padding");
+
+constexpr size_t FOOTER_SIZE = sizeof(SavestateFooter);
+
+/*!
+ * \brief Space set aside for achievement progress in every savestate
+ *
+ * Kodi asks for the savestate size once, when the game is loaded, and caches
+ * it. That happens before rc_client has finished identifying the game over the
+ * network, so neither the progress size nor even the achievement count is
+ * known yet - the reserve cannot be derived from the set being played.
+ *
+ * It is therefore sized for the worst case instead: rc_client stores a header
+ * plus roughly 40 bytes per active achievement, and the largest sets published
+ * by RetroAchievements run to a few hundred achievements. 8 KiB covers about
+ * 200 of them.
+ *
+ * Kept deliberately tight because it is charged against every frame held in
+ * the rewind buffer, not just explicit savestates. A set that needs more than
+ * this saves emulator state alone rather than overrunning the buffer, and
+ * ProgressSize() logs the shortfall so the figure can be revisited.
+ */
+constexpr size_t PROGRESS_RESERVE_BYTES = 8 * 1024;
+} // namespace
 
 void SAFE_DELETE_GAME_INFO(std::vector<CGameInfoLoader*>& vec)
 {
@@ -91,7 +157,7 @@ ADDON_STATUS CGameLibRetro::Create()
     CButtonMapper::Get().LoadButtonMap();
     CControllerTopology::GetInstance().LoadTopology();
 
-    CCheevos::Get().Initialize();
+
 
     m_client.retro_init();
 
@@ -184,7 +250,17 @@ GAME_ERROR CGameLibRetro::LoadGame(const std::string& url)
     bResult = m_client.retro_load_game(&gameInfo);
   }
 
-  return bResult ? GAME_ERROR_NO_ERROR : GAME_ERROR_FAILED;
+  if (bResult)
+  {
+    CCheevos::Get().Initialize(this, url,
+        [this](unsigned int type, uint8_t*& data, size_t& size) -> bool {
+          data = static_cast<uint8_t*>(m_client.retro_get_memory_data(type));
+          size = m_client.retro_get_memory_size(type);
+          return data != nullptr && size > 0;
+        });
+    return GAME_ERROR_NO_ERROR;
+  }
+  return GAME_ERROR_FAILED;
 }
 
 GAME_ERROR CGameLibRetro::LoadGameSpecial(SPECIAL_GAME_TYPE type, const std::vector<std::string>& urls)
@@ -234,6 +310,7 @@ GAME_ERROR CGameLibRetro::UnloadGame()
 {
   GAME_ERROR error = GAME_ERROR_FAILED;
 
+  CCheevos::Get().Deinitialize();
   m_client.retro_unload_game();
 
   CLibretroEnvironment::Get().CloseStreams();
@@ -280,7 +357,7 @@ GAME_ERROR CGameLibRetro::RunFrame()
 
   m_client.retro_run();
 
-  CCheevos::Get().TestCheevoStatusPerFrame();
+  CCheevos::Get().DoFrame();
 
   CLibretroEnvironment::Get().OnFrameEnd();
 
@@ -437,7 +514,27 @@ bool CGameLibRetro::InputEvent(const game_input_event& event)
 
 size_t CGameLibRetro::SerializeSize()
 {
-  return m_client.retro_serialize_size();
+  const size_t coreSize = m_client.retro_serialize_size();
+  if (coreSize == 0)
+    return 0;
+
+  // Savestates keep their original layout when achievements aren't in use, so
+  // nothing changes for players who don't use them
+  if (!CCheevos::Get().IsActive())
+  {
+    kodi::Log(ADDON_LOG_DEBUG, "Savestate size: %zu bytes (achievements inactive)", coreSize);
+    return coreSize;
+  }
+
+  const size_t total = coreSize + PROGRESS_RESERVE_BYTES + FOOTER_SIZE;
+
+  // Logged because this figure is multiplied by the rewind buffer's frame
+  // count, so it is worth being able to see what it actually is
+  kodi::Log(ADDON_LOG_INFO,
+            "Savestate size: %zu bytes (emulator %zu + achievement progress %zu + footer %zu)",
+            total, coreSize, PROGRESS_RESERVE_BYTES, FOOTER_SIZE);
+
+  return total;
 }
 
 GAME_ERROR CGameLibRetro::Serialize(uint8_t* data, size_t size)
@@ -445,19 +542,80 @@ GAME_ERROR CGameLibRetro::Serialize(uint8_t* data, size_t size)
   if (data == nullptr)
     return GAME_ERROR_INVALID_PARAMETERS;
 
-  bool result = m_client.retro_serialize(data, size);
+  const size_t coreSize = m_client.retro_serialize_size();
+  if (coreSize == 0 || size < coreSize)
+    return GAME_ERROR_INVALID_PARAMETERS;
 
-  return result ? GAME_ERROR_NO_ERROR : GAME_ERROR_FAILED;
+  if (!m_client.retro_serialize(data, coreSize))
+    return GAME_ERROR_FAILED;
+
+  // The buffer was sized by an earlier SerializeSize() call, so the room for
+  // progress is whatever is left over rather than something to rely on. If the
+  // runtime grew in between, SerializeProgress() reports 0 and the savestate
+  // degrades to emulator state alone rather than overrunning the buffer.
+  if (size >= coreSize + FOOTER_SIZE)
+  {
+    const size_t written =
+        CCheevos::Get().SerializeProgress(data + coreSize, size - coreSize - FOOTER_SIZE);
+
+    SavestateFooter footer{};
+    std::memcpy(footer.magic, SAVESTATE_MAGIC, sizeof(footer.magic));
+    footer.version = SAVESTATE_VERSION;
+    footer.coreSize = coreSize;
+    footer.progressSize = written;
+
+    std::memcpy(data + size - FOOTER_SIZE, &footer, FOOTER_SIZE);
+  }
+
+  return GAME_ERROR_NO_ERROR;
 }
 
 GAME_ERROR CGameLibRetro::Deserialize(const uint8_t* data, size_t size)
 {
-  if (data == nullptr)
+  if (data == nullptr || size == 0)
     return GAME_ERROR_INVALID_PARAMETERS;
 
-  bool result = m_client.retro_unserialize(data, size);
+  size_t coreSize = size;
+  size_t progressSize = 0;
 
-  return result ? GAME_ERROR_NO_ERROR : GAME_ERROR_FAILED;
+  if (size > FOOTER_SIZE)
+  {
+    SavestateFooter footer{};
+    std::memcpy(&footer, data + size - FOOTER_SIZE, FOOTER_SIZE);
+
+    // Every field is checked before it is trusted: this blob may have been
+    // written by an older build or not by us at all. The lengths are bounds
+    // checked against the blob rather than against retro_serialize_size(), so
+    // that a savestate written by a different version of the core is still
+    // handed the emulator state on its own instead of the whole blob - the
+    // core is in a better position to decide whether it can load it.
+    if (std::memcmp(footer.magic, SAVESTATE_MAGIC, sizeof(footer.magic)) == 0 &&
+        footer.version == SAVESTATE_VERSION && footer.coreSize <= size - FOOTER_SIZE &&
+        footer.progressSize <= size - FOOTER_SIZE - footer.coreSize)
+    {
+      coreSize = static_cast<size_t>(footer.coreSize);
+      progressSize = static_cast<size_t>(footer.progressSize);
+
+      if (coreSize != m_client.retro_serialize_size())
+      {
+        kodi::Log(ADDON_LOG_WARNING,
+                  "Savestate holds %zu bytes of emulator state but the core now reports %zu; "
+                  "letting the core decide whether it can load it",
+                  coreSize, m_client.retro_serialize_size());
+      }
+    }
+  }
+
+  if (!m_client.retro_unserialize(data, coreSize))
+    return GAME_ERROR_FAILED;
+
+  // Restoring progress is best-effort. A savestate from a session that wasn't
+  // logged in, or one written by an older build, just leaves the achievement
+  // runtime where it is - the emulator state is still restored.
+  if (progressSize > 0)
+    CCheevos::Get().DeserializeProgress(data + coreSize, progressSize);
+
+  return GAME_ERROR_NO_ERROR;
 }
 
 GAME_ERROR CGameLibRetro::CheatReset()
@@ -483,88 +641,76 @@ GAME_ERROR CGameLibRetro::SetCheat(unsigned int index, bool enabled, const std::
 }
 
 GAME_ERROR CGameLibRetro::RCGenerateHashFromFile(std::string& hash,
-                                                 unsigned int consoleID,
-                                                 const std::string& filePath)
+                                                    unsigned int consoleID,
+                                                    const std::string& filePath)
 {
-  if (!CCheevos::Get().GenerateHashFromFile(hash, consoleID, filePath))
-    return GAME_ERROR_FAILED;
-
-  return GAME_ERROR_NO_ERROR;
+  // Handled internally by rc_client
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 GAME_ERROR CGameLibRetro::RCGetGameIDUrl(std::string& url, const std::string& hash)
 {
-  if (!CCheevos::Get().GetGameIDUrl(url, hash))
-    return GAME_ERROR_FAILED;
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 GAME_ERROR CGameLibRetro::RCGetPatchFileUrl(std::string& url,
-                                            const std::string& username,
-                                            const std::string& token,
-                                            unsigned int gameID)
+                                               const std::string& username,
+                                               const std::string& token,
+                                               unsigned int gameID)
 {
-  if (!CCheevos::Get().GetPatchFileUrl(url, username, token, gameID))
-    return GAME_ERROR_FAILED;
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
-GAME_ERROR CGameLibRetro::SetRetroAchievementsCredentials(const std::string& username, const std::string& token)
+GAME_ERROR CGameLibRetro::SetRetroAchievementsCredentials(const std::string& username,
+                                                             const std::string& token)
 {
-  CCheevos::Get().SetRetroAchievementsCredentials(username, token);
+  CCheevos::Get().SetCredentials(username, token);
   return GAME_ERROR_NO_ERROR;
 }
 
 GAME_ERROR CGameLibRetro::RCPostRichPresenceUrl(std::string& url,
-                                                std::string& postData,
-                                                const std::string& username,
-                                                const std::string& token,
-                                                unsigned int gameID,
-                                                const std::string& richPresence)
+                                                   std::string& postData,
+                                                   const std::string& username,
+                                                   const std::string& token,
+                                                   unsigned int gameID,
+                                                   const std::string& richPresence)
 {
-  if (!CCheevos::Get().PostRichPresenceUrl(url, postData, username, token, gameID, richPresence))
-    return GAME_ERROR_FAILED;
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 GAME_ERROR CGameLibRetro::RCEnableRichPresence(const std::string& script)
 {
-  CCheevos::Get().EnableRichPresence(script);
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 GAME_ERROR CGameLibRetro::RCGetRichPresenceEvaluation(std::string& evaluation,
                                                       unsigned int consoleID)
 {
-  CCheevos::Get().EvaluateRichPresence(evaluation, consoleID);
+  // Handled internally by rc_client, which pushes rich presence to the
+  // frontend through RCOnRichPresenceUpdated. Reported as not implemented so
+  // that a frontend polling this doesn't read the empty string as a genuine
+  // evaluation, matching the other legacy RetroAchievements entry points.
+  evaluation.clear();
 
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
-GAME_ERROR CGameLibRetro::ActivateAchievement(unsigned cheevo_id, const std::string& memAddrExpression)
+GAME_ERROR CGameLibRetro::ActivateAchievement(unsigned cheevo_id,
+                                                  const std::string& memAddrExpression)
 {
-  if (!CCheevos::Get().ActivateAchievement(cheevo_id, memAddrExpression))
-    return GAME_ERROR_FAILED;
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 
-GAME_ERROR CGameLibRetro::GetCheevoUrlId(const std::function<void(const std::string& achievementUrl, unsigned int cheevoId)>& callback)
+GAME_ERROR CGameLibRetro::GetCheevoUrlId(
+    const std::function<void(const std::string& achievementUrl, unsigned int cheevoId)>& callback)
 {
-  CCheevos::Get().GetCheevoUrlId(callback);
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 GAME_ERROR CGameLibRetro::RCResetRuntime()
 {
-  CCheevos::Get().ResetRuntime();
-
-  return GAME_ERROR_NO_ERROR;
+  return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
 bool CGameLibRetro::GetEjectState()

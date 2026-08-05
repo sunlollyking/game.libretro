@@ -2,24 +2,31 @@ project(rcheevos)
 cmake_minimum_required(VERSION 3.0...4.0)
 
 # Disable Lua for now
-add_definitions(-DRC_DISABLE_LUA)
+# RC_CLIENT_SUPPORTS_HASH gates rc_client_begin_identify_and_load_game(), which
+# the add-on uses to identify a game without knowing its console up front. It
+# has to be defined for the library too, not just for our own translation
+# units, or the function is compiled out and the reference goes unresolved.
+add_definitions(-DRC_DISABLE_LUA -DRC_STATIC -DRC_CLIENT_SUPPORTS_HASH)
 
 include_directories(
   include
+  src
+  ${CMAKE_INSTALL_PREFIX}/include/libretro-common
 )
 
 add_library(${PROJECT_NAME}lib
+  src/rc_client.c
+  src/rc_client_external.c
+  src/rc_client_raintegration.c
+  src/rc_compat.c
+  src/rc_libretro.c
+  src/rc_util.c
+  src/rc_version.c
   src/rapi/rc_api_common.c
   src/rapi/rc_api_editor.c
   src/rapi/rc_api_info.c
   src/rapi/rc_api_runtime.c
   src/rapi/rc_api_user.c
-  src/rc_client.c
-  src/rc_client_external.c
-  src/rc_client_raintegration.c
-  src/rc_compat.c
-  src/rc_util.c
-  src/rc_version.c
   src/rcheevos/alloc.c
   src/rcheevos/condition.c
   src/rcheevos/condset.c
@@ -69,6 +76,7 @@ install(
     include/rc_runtime_types.h
     include/rc_util.h
     include/rcheevos.h
+    src/rc_libretro.h
   DESTINATION
     include/${PROJECT_NAME}
 )
