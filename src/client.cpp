@@ -257,6 +257,10 @@ GAME_ERROR CGameLibRetro::GetGameTiming(game_system_timing& timing_info)
   CLibretroEnvironment::Get().UpdateVideoGeometry(retro_info.geometry);
   CLibretroEnvironment::Get().VideoTiming().SetFrameRate(retro_info.timing.fps);
 
+  // The geometry the hardware rendering stream needs is now known, so bring the
+  // core's context up before the frontend asks anything that depends on it
+  CLibretroEnvironment::Get().Video().OpenHwStream();
+
   return GAME_ERROR_NO_ERROR;
 }
 
