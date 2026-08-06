@@ -79,13 +79,6 @@ void CFrontendBridge::VideoRefresh(const void* data, unsigned int width, unsigne
 {
   if (data == RETRO_HW_FRAME_BUFFER_VALID)
   {
-    static bool bLoggedHwFrame = false;
-    if (!bLoggedHwFrame)
-    {
-      kodi::Log(ADDON_LOG_DEBUG, "Core submitted its first hardware-rendered frame");
-      bLoggedHwFrame = true;
-    }
-
     CLibretroEnvironment::Get().Video().RenderHwFrame();
   }
   else if (data == nullptr)
@@ -217,13 +210,6 @@ int16_t CFrontendBridge::InputState(unsigned int port, unsigned int device, unsi
 
 uintptr_t CFrontendBridge::HwGetCurrentFramebuffer(void)
 {
-  static bool bLoggedRequest = false;
-  if (!bLoggedRequest)
-  {
-    kodi::Log(ADDON_LOG_DEBUG, "Core asked for a hardware framebuffer for the first time");
-    bLoggedRequest = true;
-  }
-
   if (!CLibretroEnvironment::Get().GetAddon())
     return 0;
 
