@@ -93,16 +93,6 @@ uintptr_t CVideoStream::GetHwFramebuffer()
     if (framebuffer->hw_framebuffer.framebuffer == 0)
       return 0;
 
-    // The buffer is released at the end of every frame, so log only the first
-    // acquisition rather than one line per frame
-    static bool bLoggedAcquire = false;
-    if (!bLoggedAcquire)
-    {
-      kodi::Log(ADDON_LOG_DEBUG, "Acquired hardware framebuffer %u at %ux%u",
-                static_cast<unsigned int>(framebuffer->hw_framebuffer.framebuffer), width, height);
-      bLoggedAcquire = true;
-    }
-
     m_framebuffer = std::move(framebuffer);
   }
 
