@@ -232,12 +232,26 @@ void CVideoStream::OnFrameBegin()
   if (m_addon == nullptr)
     return;
 
-  // Open hardware rendering stream on first frame
+  // Normally already open, from as soon as the core reported its geometry
+  OpenHwStream();
+}
+
+void CVideoStream::OpenHwStream()
+{
+  if (m_addon == nullptr)
+    return;
+
   if (!m_stream.IsOpen() && m_streamType == GAME_STREAM_HW_FRAMEBUFFER)
   {
     // The frontend allocates its framebuffer while opening the stream, so it
-    // needs the frame size now. By this point the core has reported its system
-    // AV info, which was not true when hardware rendering was negotiated.
+    // needs the frame size now. That is why this waits for the core's system
+    // AV info, which was not available when hardware rendering was negotiated.
+    //
+    // It must not wait any longer than that, though. A core's GPU resources
+    // come up in context_reset, and the frontend asks the core things that
+    // depend on them -- its savestate size, for one -- before ever running a
+    // frame. Leaving this until the first frame means answering those
+    // questions with no renderer built yet.
     game_stream_properties streamProperties{GAME_STREAM_HW_FRAMEBUFFER};
     streamProperties.hw_framebuffer.max_width = m_geometry->MaxWidth();
     streamProperties.hw_framebuffer.max_height = m_geometry->MaxHeight();

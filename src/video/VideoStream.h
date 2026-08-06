@@ -37,6 +37,8 @@ namespace LIBRETRO
     void DupeFrame() { } // Not supported
     void RenderHwFrame();
 
+    void OpenHwStream();
+
     void OnFrameBegin();
     void OnFrameEnd();
 
