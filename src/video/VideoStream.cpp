@@ -11,6 +11,8 @@
 
 #include "client.h"
 
+#include <kodi/General.h>
+
 using namespace LIBRETRO;
 
 CVideoStream::CVideoStream() :
@@ -71,9 +73,16 @@ uintptr_t CVideoStream::GetHwFramebuffer()
     const unsigned int height = m_geometry->MaxHeight();
 
     if (width == 0 || height == 0)
+    {
+      kodi::Log(ADDON_LOG_ERROR, "Core reported no maximum geometry, cannot size framebuffer");
       return 0;
+    }
 
     std::unique_ptr<game_stream_buffer> framebuffer(new game_stream_buffer{});
+
+    // The frontend dispatches on the buffer type and rejects anything else, so
+    // a zero-initialised buffer is always refused
+    framebuffer->type = GAME_STREAM_HW_FRAMEBUFFER;
 
     // Don't cache a failed lookup, or the core would be stuck with a
     // framebuffer of 0 for the rest of the session. The frontend may not have
@@ -83,6 +92,16 @@ uintptr_t CVideoStream::GetHwFramebuffer()
 
     if (framebuffer->hw_framebuffer.framebuffer == 0)
       return 0;
+
+    // The buffer is released at the end of every frame, so log only the first
+    // acquisition rather than one line per frame
+    static bool bLoggedAcquire = false;
+    if (!bLoggedAcquire)
+    {
+      kodi::Log(ADDON_LOG_DEBUG, "Acquired hardware framebuffer %u at %ux%u",
+                static_cast<unsigned int>(framebuffer->hw_framebuffer.framebuffer), width, height);
+      bLoggedAcquire = true;
+    }
 
     m_framebuffer = std::move(framebuffer);
   }
@@ -226,11 +245,26 @@ void CVideoStream::OnFrameBegin()
   // Open hardware rendering stream on first frame
   if (!m_stream.IsOpen() && m_streamType == GAME_STREAM_HW_FRAMEBUFFER)
   {
+    // The frontend allocates its framebuffer while opening the stream, so it
+    // needs the frame size now. By this point the core has reported its system
+    // AV info, which was not true when hardware rendering was negotiated.
     game_stream_properties streamProperties{GAME_STREAM_HW_FRAMEBUFFER};
+    streamProperties.hw_framebuffer.max_width = m_geometry->MaxWidth();
+    streamProperties.hw_framebuffer.max_height = m_geometry->MaxHeight();
+
     if (!m_stream.Open(streamProperties))
     {
       // This will stop the stream from trying to be opened twice
       m_streamType = GAME_STREAM_UNKNOWN;
+    }
+    else if (m_addon != nullptr)
+    {
+      // Tell the core its context is ready, now that the stream is open.
+      // This cannot happen while the stream is being opened: cores ask for
+      // their framebuffer from inside context_reset, and the stream has no
+      // handle to ask through until Open() has returned.
+      kodi::Log(ADDON_LOG_DEBUG, "Hardware rendering stream open, resetting core context");
+      m_addon->HwContextReset();
     }
   }
 }
