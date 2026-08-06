@@ -730,10 +730,19 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
   case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
   {
     retro_hw_context_type* typedData = static_cast<retro_hw_context_type*>(data);
-
-    // Not implemented
-    (void)typedData;
-    return false;
+    if (typedData)
+    {
+      // Kodi's hardware rendering path is OpenGL. Saying so lets a core that
+      // can drive several backends pick the one we can actually present, and
+      // lets a Vulkan-only core fail here, where it can still fall back to
+      // software, rather than later at context_reset.
+      //
+      // Cores that ask this and get no answer typically fall back to their
+      // software renderer, so leaving it unanswered silently costs hardware
+      // rendering on cores that would otherwise support it.
+      *typedData = RETRO_HW_CONTEXT_OPENGL_CORE;
+    }
+    return true;
   }
   case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
   {
