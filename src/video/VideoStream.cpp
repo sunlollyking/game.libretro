@@ -63,10 +63,28 @@ uintptr_t CVideoStream::GetHwFramebuffer()
 
   if (!m_framebuffer)
   {
-    m_framebuffer.reset(new game_stream_buffer{});
+    // libretro's get_current_framebuffer() takes no parameters, so the size
+    // comes from the geometry the core reported. Use the maximum, as the
+    // frontend has to hand back a framebuffer the core can render any frame
+    // into without it being reallocated mid-game.
+    const unsigned int width = m_geometry->MaxWidth();
+    const unsigned int height = m_geometry->MaxHeight();
 
-    if (!m_stream.GetBuffer(0, 0, *m_framebuffer))
+    if (width == 0 || height == 0)
       return 0;
+
+    std::unique_ptr<game_stream_buffer> framebuffer(new game_stream_buffer{});
+
+    // Don't cache a failed lookup, or the core would be stuck with a
+    // framebuffer of 0 for the rest of the session. The frontend may not have
+    // a renderer ready yet on the first few frames.
+    if (!m_stream.GetBuffer(width, height, *framebuffer))
+      return 0;
+
+    if (framebuffer->hw_framebuffer.framebuffer == 0)
+      return 0;
+
+    m_framebuffer = std::move(framebuffer);
   }
 
   return m_framebuffer->hw_framebuffer.framebuffer;
@@ -239,4 +257,9 @@ void CVideoStream::CloseStream()
     m_stream.Close();
     m_format = GAME_PIXEL_FORMAT_UNKNOWN;
   }
+
+  // The cached framebuffer belongs to the stream that just closed. Drop it so
+  // a reopened stream - after a geometry change, say - asks for a new one at
+  // the new size instead of rendering into a stale framebuffer.
+  m_framebuffer.reset();
 }
