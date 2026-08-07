@@ -35,7 +35,7 @@ namespace LIBRETRO
 
     void AddFrame(const uint8_t* data, unsigned int size, unsigned int width, unsigned int height, GAME_PIXEL_FORMAT format, GAME_VIDEO_ROTATION rotation);
     void DupeFrame() { } // Not supported
-    void RenderHwFrame();
+    void RenderHwFrame(unsigned int width, unsigned int height);
 
     void OpenHwStream();
 

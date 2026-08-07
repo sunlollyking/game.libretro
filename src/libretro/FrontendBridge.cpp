@@ -79,7 +79,7 @@ void CFrontendBridge::VideoRefresh(const void* data, unsigned int width, unsigne
 {
   if (data == RETRO_HW_FRAME_BUFFER_VALID)
   {
-    CLibretroEnvironment::Get().Video().RenderHwFrame();
+    CLibretroEnvironment::Get().Video().RenderHwFrame(width, height);
   }
   else if (data == nullptr)
   {

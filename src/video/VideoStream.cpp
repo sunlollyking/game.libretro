@@ -38,8 +38,19 @@ void CVideoStream::Deinitialize()
 
 void CVideoStream::SetGeometry(const CVideoGeometry &geometry)
 {
-  // Close stream so it can be reopened with the updated geometry
-  if (m_addon != nullptr)
+  if (m_addon == nullptr || *m_geometry == geometry)
+  {
+    *m_geometry = geometry;
+    return;
+  }
+
+  // A hardware rendering stream owns the context the core renders with, and the
+  // core built its textures, shaders and framebuffers in that context when it
+  // was told the context was ready. Closing the stream destroys the context and
+  // takes all of that with it, while the core carries on using handles that no
+  // longer refer to anything. Its framebuffer is sized from the maximum
+  // geometry and grown on demand, so a new geometry needs no reopening at all.
+  if (m_streamType != GAME_STREAM_HW_FRAMEBUFFER)
     CloseStream();
 
   *m_geometry = geometry;
@@ -208,7 +219,7 @@ void CVideoStream::AddFrame(const uint8_t* data, unsigned int size, unsigned int
   m_stream.AddData(packet);
 }
 
-void CVideoStream::RenderHwFrame()
+void CVideoStream::RenderHwFrame(unsigned int width, unsigned int height)
 {
   if (m_addon == nullptr)
     return;
@@ -223,6 +234,12 @@ void CVideoStream::RenderHwFrame()
 
   packet.type = GAME_STREAM_HW_FRAMEBUFFER;
   packet.hw_framebuffer.framebuffer = m_framebuffer->hw_framebuffer.framebuffer;
+
+  // The framebuffer is sized for the largest frame the core said it would draw,
+  // and this frame is usually smaller. Without the size the frontend shows the
+  // whole framebuffer, so the image sits in a corner of it.
+  packet.hw_framebuffer.width = width;
+  packet.hw_framebuffer.height = height;
 
   m_stream.AddData(packet);
 }
