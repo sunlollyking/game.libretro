@@ -26,6 +26,14 @@ namespace LIBRETRO
     unsigned int MaxHeight() const { return m_maxHeight; }
     float DisplayAspectRatio() const { return m_displayAspectRatio; }
 
+    bool operator==(const CVideoGeometry& rhs) const
+    {
+      return m_nominalWidth == rhs.m_nominalWidth && m_nominalHeight == rhs.m_nominalHeight &&
+             m_maxWidth == rhs.m_maxWidth && m_maxHeight == rhs.m_maxHeight &&
+             m_displayAspectRatio == rhs.m_displayAspectRatio;
+    }
+    bool operator!=(const CVideoGeometry& rhs) const { return !(*this == rhs); }
+
   private:
     unsigned int m_nominalWidth = 0;
     unsigned int m_nominalHeight = 0;
