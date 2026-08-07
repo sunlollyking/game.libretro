@@ -260,6 +260,15 @@ void CVideoStream::OpenHwStream()
     {
       // This will stop the stream from trying to be opened twice
       m_streamType = GAME_STREAM_UNKNOWN;
+
+      // The core was told hardware rendering was available when it asked, long
+      // before the frontend tried and failed to build a context -- on a display
+      // stack without EGL, say. It has already wired itself up to render that
+      // way, and running it now means calling through callbacks that were never
+      // installed. Close the game rather than let it fault.
+      kodi::Log(ADDON_LOG_ERROR,
+                "Failed to open the hardware rendering stream, closing the game");
+      m_addon->CloseGame();
     }
     else if (m_addon != nullptr)
     {
