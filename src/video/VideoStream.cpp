@@ -238,8 +238,10 @@ void CVideoStream::RenderHwFrame(unsigned int width, unsigned int height)
   // The framebuffer is sized for the largest frame the core said it would draw,
   // and this frame is usually smaller. Without the size the frontend shows the
   // whole framebuffer, so the image sits in a corner of it.
+#if defined(HAVE_GAME_HW_FRAMEBUFFER_SIZE)
   packet.hw_framebuffer.width = width;
   packet.hw_framebuffer.height = height;
+#endif
 
   m_stream.AddData(packet);
 }
@@ -270,8 +272,10 @@ void CVideoStream::OpenHwStream()
     // frame. Leaving this until the first frame means answering those
     // questions with no renderer built yet.
     game_stream_properties streamProperties{GAME_STREAM_HW_FRAMEBUFFER};
+#if defined(HAVE_GAME_HW_FRAMEBUFFER_SIZE)
     streamProperties.hw_framebuffer.max_width = m_geometry->MaxWidth();
     streamProperties.hw_framebuffer.max_height = m_geometry->MaxHeight();
+#endif
 
     if (!m_stream.Open(streamProperties))
     {
