@@ -66,6 +66,17 @@ bool CVideoStream::EnableHardwareRendering()
   return true;
 }
 
+void CVideoStream::DisableHardwareRendering()
+{
+  // Only ever undoes the line above, and only before a stream is opened: the
+  // frontend is asked whether it can render in hardware after the stream has
+  // been put in hardware mode, and a refusal has to put it back. Left set, the
+  // stream would open a framebuffer the frontend has already said it cannot
+  // provide, and close the game while the core was still starting up.
+  if (m_streamType == GAME_STREAM_HW_FRAMEBUFFER && !m_stream.IsOpen())
+    m_streamType = GAME_STREAM_UNKNOWN;
+}
+
 uintptr_t CVideoStream::GetHwFramebuffer()
 {
   if (m_addon == nullptr)
@@ -255,10 +266,10 @@ void CVideoStream::OnFrameBegin()
   OpenHwStream();
 }
 
-void CVideoStream::OpenHwStream()
+bool CVideoStream::OpenHwStream()
 {
   if (m_addon == nullptr)
-    return;
+    return false;
 
   if (!m_stream.IsOpen() && m_streamType == GAME_STREAM_HW_FRAMEBUFFER)
   {
@@ -283,13 +294,16 @@ void CVideoStream::OpenHwStream()
       m_streamType = GAME_STREAM_UNKNOWN;
 
       // The core was told hardware rendering was available when it asked, long
-      // before the frontend tried and failed to build a context -- on a display
-      // stack without EGL, say. It has already wired itself up to render that
-      // way, and running it now means calling through callbacks that were never
-      // installed. Close the game rather than let it fault.
-      kodi::Log(ADDON_LOG_ERROR,
-                "Failed to open the hardware rendering stream, closing the game");
-      m_addon->CloseGame();
+      // before the frontend tried and failed to build a context. It has already
+      // wired itself up to render that way, and running it now means calling
+      // through callbacks that were never installed.
+      //
+      // Closing the game from here does not stop that: this runs underneath the
+      // frontend's own load, which carries on to set up controllers and run the
+      // core regardless, and the core then faults with its context never reset.
+      // Report the failure instead and let the caller fail the load.
+      kodi::Log(ADDON_LOG_ERROR, "Failed to open the hardware rendering stream");
+      return false;
     }
     else if (m_addon != nullptr)
     {
@@ -301,6 +315,8 @@ void CVideoStream::OpenHwStream()
       m_addon->HwContextReset();
     }
   }
+
+  return true;
 }
 
 void CVideoStream::OnFrameEnd()
