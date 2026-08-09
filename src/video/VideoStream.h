@@ -29,6 +29,7 @@ namespace LIBRETRO
     void SetGeometry(const CVideoGeometry &geometry);
 
     bool EnableHardwareRendering();
+    void DisableHardwareRendering();
 
     uintptr_t GetHwFramebuffer();
     bool GetSwFramebuffer(unsigned int width, unsigned int height, GAME_PIXEL_FORMAT requestedFormat, game_stream_sw_framebuffer_buffer &framebuffer);
@@ -37,7 +38,7 @@ namespace LIBRETRO
     void DupeFrame() { } // Not supported
     void RenderHwFrame(unsigned int width, unsigned int height);
 
-    void OpenHwStream();
+    bool OpenHwStream();
 
     void OnFrameBegin();
     void OnFrameEnd();

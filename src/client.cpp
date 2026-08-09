@@ -334,8 +334,12 @@ GAME_ERROR CGameLibRetro::GetGameTiming(game_system_timing& timing_info)
   CLibretroEnvironment::Get().UpdateVideoGeometry(retro_info.geometry);
 
   // The geometry the hardware rendering stream needs is now known, so bring the
-  // core's context up before the frontend asks anything that depends on it
-  CLibretroEnvironment::Get().Video().OpenHwStream();
+  // core's context up before the frontend asks anything that depends on it.
+  // Failing here fails the load: a core that asked for hardware rendering and
+  // did not get it cannot be run, and this is the last point at which the
+  // frontend will still abandon the game cleanly.
+  if (!CLibretroEnvironment::Get().Video().OpenHwStream())
+    return GAME_ERROR_FAILED;
 
   return GAME_ERROR_NO_ERROR;
 }

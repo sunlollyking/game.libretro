@@ -265,7 +265,19 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
 
         // Now that hooks are installed, enable HW rendering in the frontend
         if (!m_addon->EnableHardwareRendering(hw_info))
+        {
+          // The frontend cannot render this context type on the display stack
+          // it has. Returning false leaves the core to fall back to software,
+          // so put back everything set up above -- the stream especially, which
+          // would otherwise go on to open a framebuffer that has just been
+          // refused, and close the game part-way through the core's startup.
+          m_videoStream.DisableHardwareRendering();
+          m_clientBridge->SetHwContextReset(nullptr);
+          m_clientBridge->SetHwContextDestroy(nullptr);
+          typedData->get_current_framebuffer = nullptr;
+          typedData->get_proc_address = nullptr;
           return false;
+        }
       }
       break;
     }
