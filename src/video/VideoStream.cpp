@@ -238,6 +238,16 @@ void CVideoStream::RenderHwFrame(unsigned int width, unsigned int height)
   if (!m_stream.IsOpen() || m_streamType != GAME_STREAM_HW_FRAMEBUFFER)
     return;
 
+  // The buffer is released at the end of every frame, and a core that asks for
+  // its framebuffer once -- in context_reset, keeping the ID because it never
+  // changes -- has nothing held here by the time it presents. That is allowed:
+  // libretro does not require get_current_framebuffer() to be called per frame.
+  // Take one now rather than dropping the frame, which is what left Flycast
+  // running with a black picture while Saturn, which does ask every frame,
+  // rendered normally.
+  if (!m_framebuffer)
+    GetHwFramebuffer();
+
   if (!m_framebuffer)
     return;
 
