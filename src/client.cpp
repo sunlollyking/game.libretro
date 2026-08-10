@@ -363,6 +363,15 @@ GAME_ERROR CGameLibRetro::RunFrame()
 
   CLibretroEnvironment::Get().OnFrameBegin();
 
+  // Logged once, to separate a core that is not being run at all from one that
+  // runs but never presents a frame. A black picture looks the same either way.
+  static bool bLoggedFirstRun = false;
+  if (!bLoggedFirstRun)
+  {
+    bLoggedFirstRun = true;
+    kodi::Log(ADDON_LOG_INFO, "Running the core's first frame");
+  }
+
   m_client.retro_run();
 
   CCheevos::Get().DoFrame();
