@@ -31,6 +31,9 @@ namespace LIBRETRO
 
   private:
     CGameLibRetro*        m_addon;
+
+    //! \brief Set once a failed stream open has been reported
+    bool m_bLoggedOpenFailure = false;
     CSingleFrameAudio     m_singleFrameAudio;
 
     kodi::addon::CInstanceGame::CStream m_stream;
