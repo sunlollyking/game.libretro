@@ -7,6 +7,9 @@
 
 #include "Cheevos.h"
 
+#include "libretro/LibretroEnvironment.h"
+#include "libretro/MemoryMap.h"
+
 #include <kodi/Filesystem.h>
 #include <kodi/General.h>
 #include <kodi/addon-instance/Game.h>
@@ -21,6 +24,7 @@
 #include <future>
 #include <cstring>
 #include <thread>
+#include <vector>
 
 using namespace LIBRETRO;
 
@@ -509,12 +513,34 @@ uint32_t CCheevos::RcheevosReadMemory(uint32_t address, uint8_t* buffer,
     std::lock_guard<std::mutex> lock(s_instance->m_memoryMutex);
     if (!s_instance->m_memoryInitialized)
     {
-      rc_libretro_memory_init(&s_instance->m_memoryRegions, nullptr, RcheevosGetCoreMemoryInfo,
-                              gameInfo->console_id);
+      // rcheevos matches the regions a console is expected to have against the
+      // core's memory map. Without one it can only see what the core exposes as
+      // RETRO_MEMORY_SYSTEM_RAM, which is a single flat block: enough for a
+      // console whose memory is one region, and nothing at all for one that is
+      // split. The Saturn wants fourteen regions and matched none of them, so
+      // every achievement it had was reported unsupported.
+      const CMemoryMap& memoryMap = CLibretroEnvironment::Get().GetMemoryMap();
+
+      std::vector<retro_memory_descriptor> descriptors;
+      descriptors.reserve(memoryMap.Size());
+      for (size_t i = 0; i < memoryMap.Size(); ++i)
+        descriptors.emplace_back(memoryMap[static_cast<int>(i)].descriptor);
+
+      retro_memory_map retroMemoryMap{};
+      retroMemoryMap.descriptors = descriptors.data();
+      retroMemoryMap.num_descriptors = static_cast<unsigned int>(descriptors.size());
+
+      // A core that publishes no map is no worse off than before, and still
+      // gets whatever it exposes as system RAM
+      rc_libretro_memory_init(&s_instance->m_memoryRegions,
+                              descriptors.empty() ? nullptr : &retroMemoryMap,
+                              RcheevosGetCoreMemoryInfo, gameInfo->console_id);
       s_instance->m_memoryInitialized = true;
 
-      kodi::Log(ADDON_LOG_INFO, "CCheevos: memory mapped for console %u, total_size=%u",
-                gameInfo->console_id, s_instance->m_memoryRegions.total_size);
+      kodi::Log(ADDON_LOG_INFO,
+                "CCheevos: memory mapped for console %u from %zu descriptors, total_size=%u",
+                gameInfo->console_id, descriptors.size(),
+                s_instance->m_memoryRegions.total_size);
     }
   }
 
