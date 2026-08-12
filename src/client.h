@@ -112,7 +112,7 @@ public:
   std::string GetImageLabel(unsigned int imageIndex) override;
 
 private:
-  GAME_ERROR AudioAvailable();
+  GAME_ERROR AudioAvailable() override;
 
   LIBRETRO::Timer                         m_timer;
   LIBRETRO::CLibretroDLL                  m_client;
