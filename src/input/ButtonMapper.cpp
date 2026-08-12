@@ -110,6 +110,28 @@ libretro_subclass_t CButtonMapper::GetSubclass(const std::string& strControllerI
 
 int CButtonMapper::GetLibretroIndex(const std::string& strControllerId, const std::string& strFeatureName)
 {
+  const int index = GetLibretroIndexInternal(strControllerId, strFeatureName);
+
+  // Report each feature once, the first time it is asked for. A feature that
+  // resolves to -1 is one the user can press and the core will never see, which
+  // is otherwise silent: the input arrives, Kodi handles it, and it stops here.
+  const std::string key = strControllerId + "/" + strFeatureName;
+  if (m_loggedFeatures.insert(key).second)
+  {
+    if (index < 0)
+      esyslog("Buttonmap: %s feature \"%s\" does not resolve, the core will never see it",
+              strControllerId.c_str(), strFeatureName.c_str());
+    else
+      dsyslog("Buttonmap: %s feature \"%s\" -> libretro index %d", strControllerId.c_str(),
+              strFeatureName.c_str(), index);
+  }
+
+  return index;
+}
+
+int CButtonMapper::GetLibretroIndexInternal(const std::string& strControllerId,
+                                            const std::string& strFeatureName)
+{
   if (!strControllerId.empty() && !strFeatureName.empty())
   {
     // Handle default controller unless it appears in buttonmap.xml

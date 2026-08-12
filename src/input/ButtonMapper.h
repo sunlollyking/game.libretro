@@ -9,8 +9,9 @@
 
 #include "InputTypes.h"
 
-#include <vector>
+#include <set>
 #include <string>
+#include <vector>
 
 // TODO: Make this class generic and move XML-specific stuff to xml subfolder
 class TiXmlElement;
@@ -38,11 +39,16 @@ namespace LIBRETRO
     std::string GetControllerFeature(const std::string& strControllerId, const std::string& strLibretroFeature);
 
   private:
+    int GetLibretroIndexInternal(const std::string& strControllerId,
+                                const std::string& strFeatureName);
     bool HasController(const std::string& strControllerId) const;
     std::string GetFeature(const std::string& strControllerId, const std::string& strFeatureName) const;
     std::string GetAxis(const std::string& strControllerId, const std::string& strFeatureName) const;
 
     bool Deserialize(TiXmlElement* pElement);
+
+    //! \brief Features already reported, so each is logged once not per event
+    std::set<std::string> m_loggedFeatures;
 
     using DeviceVector = std::vector<DevicePtr>;
     using DeviceIt = DeviceVector::const_iterator;

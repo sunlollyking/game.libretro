@@ -179,7 +179,15 @@ int16_t CFrontendBridge::InputState(unsigned int port, unsigned int device, unsi
 
     if (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON)
     {
+      // A trigger runs 0 to 1, not -1 to 1, so it does not take the bipolar
+      // scaling below: that turned a released trigger into -1 rather than 0,
+      // which a core narrowing the value into an unsigned byte reads as fully
+      // pressed. Scale it into libretro's 0..0x7fff range directly.
       value = CInputManager::Get().AnalogButtonState(port, id);
+
+      const float clampedValue = std::max(0.0f, std::min(1.0f, value));
+      inputState = static_cast<int>(clampedValue * 0x7fff);
+      break;
     }
     else
     {
