@@ -712,10 +712,22 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
   case RETRO_ENVIRONMENT_GET_FASTFORWARDING:
   {
     bool* typedData = static_cast<bool*>(data);
+    if (typedData)
+      *typedData = false;
 
-    // Not implemented
-    (void)typedData;
-    return false;
+    // Answered rather than declined. Kodi has no fast-forward for games, so the
+    // answer is always no -- but saying nothing is not the same as saying no.
+    // Flycast asks this to decide whether to throttle, and throttles by pacing
+    // itself against the audio it hands over:
+    //
+    //   if (settings.rend.ThreadedRendering)
+    //     if (environ_cb(RETRO_ENVIRONMENT_GET_FASTFORWARDING, &fastforward))
+    //       settings.aica.LimitFPS = !fastforward;
+    //
+    // Declining left LimitFPS at its initial 0, so it skipped every audio
+    // flush and ran unthrottled: Dreamcast games were silent and about twice
+    // their proper speed.
+    return true;
   }
   case RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE:
   {
