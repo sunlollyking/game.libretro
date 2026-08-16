@@ -46,7 +46,12 @@ jobs:
 
     - script: |
         cd ..
-        git clone --branch retroplayer-achievements-api --depth=1 https://github.com/sunlollyking/xbmc.git kodi
+        # Build against the Kodi branch this add-on is paired with, garbear/xbmc#151.
+        # It carries Game API 7.0.0, which is what the hardware rendering here
+        # needs and what the add-on declares it depends on. Goes back to
+        #   git clone --branch master --depth=1 https://github.com/xbmc/xbmc.git kodi
+        # once that lands.
+        git clone --branch retroplayer-opengl-hw --depth=1 https://github.com/sunlollyking/xbmc.git kodi
         cd $(Build.SourcesDirectory)
         mkdir build
         cd build
