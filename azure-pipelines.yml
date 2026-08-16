@@ -46,7 +46,12 @@ jobs:
 
     - script: |
         cd ..
-        git clone --branch master --depth=1 https://github.com/xbmc/xbmc.git kodi
+        # DO NOT MERGE with this line as it stands. The achievements Game API
+        # this add-on calls lives in garbear/xbmc#150 and is not in Kodi yet,
+        # so the build has nowhere else to find it. Restore the line below,
+        # and delete this one, once that has landed:
+        #   git clone --branch master --depth=1 https://github.com/xbmc/xbmc.git kodi
+        git clone --branch retroplayer-achievements-api --depth=1 https://github.com/sunlollyking/xbmc.git kodi
         cd $(Build.SourcesDirectory)
         mkdir build
         cd build
