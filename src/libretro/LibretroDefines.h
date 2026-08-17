@@ -16,6 +16,24 @@
 #define LIBRETRO_SYSTEM_DIRECTORY_NAME  "system"
 
 /*!
+ * \brief The directory the frontend's system layers are merged into
+ *
+ * libretro asks for a single system directory, so the layers the frontend
+ * offers -- its shared BIOS folder, game resource add-ons, this add-on's own
+ * folder -- are collapsed into one directory and the core is given that.
+ */
+#define LIBRETRO_MERGED_SYSTEM_DIRECTORY_NAME  "system-merged"
+
+/*!
+ * \brief The name the frontend gives a client's own resources folder
+ *
+ * Such a layer holds whatever the add-on ships, so it is only a source of
+ * system files through the "system" subfolder inside it, never in its own
+ * right.
+ */
+#define LIBRETRO_CLIENT_RESOURCES_DIRECTORY_NAME  "resources"
+
+/*!
  * \brief The "save" directory of the frontend
  *
  * This directory can be used to store SRAM, memory cards, high scores, etc,
