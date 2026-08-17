@@ -15,6 +15,11 @@
 #include <assert.h>
 #include <utility>
 
+#if defined(TARGET_POSIX)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 using namespace LIBRETRO;
 
 CLibretroResources::CLibretroResources() :
@@ -182,28 +187,91 @@ std::string CLibretroResources::ResolveSystemLayer(const std::string& resourceDi
   return "";
 }
 
+bool CLibretroResources::HasUsableFile(const std::string& path)
+{
+#if defined(TARGET_POSIX)
+  // Decide this by whether the path resolves to something readable, not by
+  // whether the name is taken. A symlink left over from a previous merge whose
+  // target has since been removed still occupies the name: it has to count as
+  // absent, or the core is handed a link that opens nothing -- and it has to be
+  // cleared, or nothing can be created in its place.
+  struct stat resolved;
+  if (::stat(path.c_str(), &resolved) == 0)
+    return true;
+
+  struct stat entry;
+  if (::lstat(path.c_str(), &entry) == 0)
+    ::unlink(path.c_str());
+
+  return false;
+#else
+  return kodi::vfs::FileExists(path, false);
+#endif
+}
+
+bool CLibretroResources::LinkOrCopy(const std::string& source,
+                                    const std::string& destination,
+                                    unsigned int& filesLinked,
+                                    unsigned int& filesCopied)
+{
+#if defined(TARGET_POSIX)
+  // Link rather than duplicate. A BIOS collection is tens of megabytes and the
+  // merged view is per client, so copying charges that against every core
+  // installed -- on the sort of storage these run from, that adds up.
+  //
+  // A link also keeps what a core writes where it has always gone. Cores do
+  // write into their system directory: flycast keeps dc_nvmem.bin there. Copied
+  // into the merged view, that write lands somewhere rebuilt on a later load
+  // and is lost. Through a link it reaches the layer the file came from, which
+  // is what happened before any of this existed.
+  //
+  // Only for real paths. A layer reached through Kodi's VFS has no name the
+  // system call could use.
+  if (source.find("://") == std::string::npos && destination.find("://") == std::string::npos)
+  {
+    if (::symlink(source.c_str(), destination.c_str()) == 0)
+    {
+      ++filesLinked;
+      return true;
+    }
+  }
+#endif
+
+  // Windows without the privilege for symlinks, an Android volume that has no
+  // concept of them, a VFS layer: copy, and behave as before.
+  if (kodi::vfs::CopyFile(source, destination))
+  {
+    ++filesCopied;
+    return true;
+  }
+
+  return false;
+}
+
 void CLibretroResources::MergeSystemLayers(const std::vector<std::string>& layers,
                                            const std::string& target)
 {
+  unsigned int filesLinked = 0;
   unsigned int filesCopied = 0;
 
   for (const auto& layer : layers)
   {
-    // Skip a layer that is the target, which would otherwise copy onto itself
+    // Skip a layer that is the target, which would otherwise merge onto itself
     if (layer == target)
       continue;
 
-    MergeLayer(layer, target, "", filesCopied);
+    MergeLayer(layer, target, "", filesLinked, filesCopied);
   }
 
-  if (filesCopied > 0)
-    dsyslog("Merged %u file(s) from %u system layer(s) into %s", filesCopied,
-            static_cast<unsigned int>(layers.size()), target.c_str());
+  if (filesLinked > 0 || filesCopied > 0)
+    dsyslog("Merged %u linked and %u copied file(s) from %u system layer(s) into %s", filesLinked,
+            filesCopied, static_cast<unsigned int>(layers.size()), target.c_str());
 }
 
 void CLibretroResources::MergeLayer(const std::string& layer,
                                     const std::string& target,
                                     const std::string& relPath,
+                                    unsigned int& filesLinked,
                                     unsigned int& filesCopied)
 {
   const std::string sourceDir = relPath.empty() ? layer : layer + "/" + relPath;
@@ -224,7 +292,7 @@ void CLibretroResources::MergeLayer(const std::string& layer,
       if (!kodi::vfs::DirectoryExists(destination))
         kodi::vfs::CreateDirectory(destination);
 
-      MergeLayer(layer, target, itemRelPath, filesCopied);
+      MergeLayer(layer, target, itemRelPath, filesLinked, filesCopied);
       continue;
     }
 
@@ -232,12 +300,10 @@ void CLibretroResources::MergeLayer(const std::string& layer,
     // the core itself wrote. Either way it stays: the user's own copy has to be
     // able to override what a resource add-on ships, and a core's own file must
     // not be replaced underneath it.
-    if (kodi::vfs::FileExists(destination, false))
+    if (HasUsableFile(destination))
       continue;
 
-    if (kodi::vfs::CopyFile(item.Path(), destination))
-      ++filesCopied;
-    else
+    if (!LinkOrCopy(item.Path(), destination, filesLinked, filesCopied))
       esyslog("Failed to merge %s into the system directory", item.Path().c_str());
   }
 }

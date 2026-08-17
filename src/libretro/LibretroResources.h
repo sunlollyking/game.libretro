@@ -62,7 +62,27 @@ namespace LIBRETRO
     static void MergeLayer(const std::string& layer,
                            const std::string& target,
                            const std::string& relPath,
+                           unsigned int& filesLinked,
                            unsigned int& filesCopied);
+
+    /*!
+     * \brief Put a layer's file into the merged view
+     *
+     * Symlinked where the platform allows it, copied where it does not.
+     * \return true if the file is now present in the merged view
+     */
+    static bool LinkOrCopy(const std::string& source,
+                           const std::string& destination,
+                           unsigned int& filesLinked,
+                           unsigned int& filesCopied);
+
+    /*!
+     * \brief Whether a name in the merged view already holds a usable file
+     *
+     * Clears the name first if what's there is a symlink whose target has gone,
+     * which reads as absent but still occupies the name.
+     */
+    static bool HasUsableFile(const std::string& path);
 
     CGameLibRetro*                     m_addon;
     std::vector<std::string>           m_resourceDirectories;
