@@ -700,8 +700,12 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
       }
       else
       {
+        // The spec is explicit that a version we cannot serve is refused rather
+        // than answered with nothing: a core told the call succeeded goes on to
+        // use an interface it was never given.
         esyslog("Core wants VFS version %u, which this frontend does not offer",
                 typedData->required_interface_version);
+        return false;
       }
     }
     break;
