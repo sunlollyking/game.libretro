@@ -665,6 +665,12 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
     retro_vfs_interface_info* typedData = static_cast<retro_vfs_interface_info*>(data);
     if (typedData)
     {
+      // Worth a line: whether a core routes its file access through the
+      // frontend decides whether it can see the system layers at all, and it is
+      // otherwise invisible from outside the core.
+      dsyslog("Core requested the VFS interface, version %u (frontend offers %u)",
+              typedData->required_interface_version, supported_vfs_version);
+
       if (typedData->required_interface_version <= supported_vfs_version)
       {
         static retro_vfs_interface vfsInterface = {
@@ -691,6 +697,11 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
 
         typedData->required_interface_version = supported_vfs_version;
         typedData->iface = &vfsInterface;
+      }
+      else
+      {
+        esyslog("Core wants VFS version %u, which this frontend does not offer",
+                typedData->required_interface_version);
       }
     }
     break;

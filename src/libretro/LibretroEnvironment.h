@@ -67,6 +67,12 @@ namespace LIBRETRO
     std::string GetResourcePath(const char* relPath);
 
     /*!
+     * \brief The frontend's system layers, for resolving a core's file access
+     *        across them
+     */
+    CLibretroResources& Resources() { return m_resources; }
+
+    /*!
      * \brief Called before a game is run for a frame
      */
     void OnFrameBegin();

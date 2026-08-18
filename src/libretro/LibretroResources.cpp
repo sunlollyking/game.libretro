@@ -42,7 +42,6 @@ void CLibretroResources::Initialize(CGameLibRetro* addon)
   // directory and the rest of the list had nowhere to go -- so a file present
   // in any layer but the first was invisible to the core, and installing a
   // resource add-on hid the user's own files behind it.
-  std::vector<std::string> systemLayers;
   for (const auto& dir : dirs)
   {
     if (dir.empty())
@@ -50,7 +49,7 @@ void CLibretroResources::Initialize(CGameLibRetro* addon)
 
     std::string layer = ResolveSystemLayer(dir);
     if (!layer.empty())
-      systemLayers.push_back(std::move(layer));
+      m_systemLayers.push_back(std::move(layer));
 
     m_resourceDirectories.push_back(dir);
   }
@@ -66,7 +65,7 @@ void CLibretroResources::Initialize(CGameLibRetro* addon)
     kodi::vfs::CreateDirectory(m_systemDirectory);
   }
 
-  MergeSystemLayers(systemLayers, m_systemDirectory);
+  MergeSystemLayers(m_systemLayers, m_systemDirectory);
 
   m_saveDirectory = m_addon->ProfileDirectory() + "/" LIBRETRO_SAVE_DIRECTORY_NAME;
 
@@ -153,6 +152,39 @@ std::string CLibretroResources::GetFullSystemPath(const std::string& relPath)
     return std::string(baseSystemPath) + "/" + relPath;
 
   return "";
+}
+
+std::string CLibretroResources::ResolveSystemPath(const std::string& path)
+{
+  // Only paths under the system directory are the frontend's to redirect.
+  // Anything else the core opens -- its save directory, the game itself -- is
+  // exactly where it says it is.
+  if (m_systemDirectory.empty() || path.compare(0, m_systemDirectory.size(), m_systemDirectory) != 0)
+    return path;
+
+  std::string relPath = path.substr(m_systemDirectory.size());
+  if (!relPath.empty() && (relPath.front() == '/' || relPath.front() == '\\'))
+    relPath.erase(0, 1);
+
+  if (relPath.empty())
+    return path;
+
+  // Earlier layers win, the same order the merge uses
+  for (const auto& layer : m_systemLayers)
+  {
+    const std::string candidate = layer + "/" + relPath;
+    if (kodi::vfs::FileExists(candidate, false))
+    {
+      if (candidate != path)
+        dsyslog("Resolved %s to %s", relPath.c_str(), candidate.c_str());
+      return candidate;
+    }
+  }
+
+  // No layer has it. Hand back what was asked for so the core gets its own
+  // error rather than one invented here -- and so a file it is about to create
+  // lands where it expects.
+  return path;
 }
 
 std::string CLibretroResources::ResolveSystemLayer(const std::string& resourceDirectory)

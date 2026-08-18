@@ -33,6 +33,22 @@ namespace LIBRETRO
     std::string GetFullPath(const std::string& relPath);
     std::string GetFullSystemPath(const std::string& relPath);
 
+    /*!
+     * \brief Resolve a path a core is opening against the system layers
+     *
+     * A core is given one system directory but the frontend offers several
+     * layers behind it. Anything the core opens underneath that directory is
+     * looked for in each layer in turn, so the file it gets is the one the
+     * layering says it should, resolved at the moment of the open rather than
+     * staged on disk beforehand.
+     *
+     * \param path The absolute path the core asked for
+     *
+     * \return The path to open instead, or \p path unchanged if it is not
+     *         under the system directory or no layer has it
+     */
+    std::string ResolveSystemPath(const std::string& path);
+
   private:
     const char* ApendSystemFolder(const std::string& path);
 
@@ -89,5 +105,8 @@ namespace LIBRETRO
     std::map<std::string, std::string> m_pathMap;
     std::string                        m_systemDirectory;
     std::string                        m_saveDirectory;
+
+    //! \brief The system directories behind m_systemDirectory, highest priority first
+    std::vector<std::string>           m_systemLayers;
   };
 } // namespace LIBRETRO

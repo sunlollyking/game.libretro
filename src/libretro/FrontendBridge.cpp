@@ -416,10 +416,19 @@ retro_vfs_file_handle *CFrontendBridge::OpenFile(const char *path, unsigned mode
   if (path == nullptr)
     return nullptr;
 
-  std::unique_ptr<FileHandle> fileHandle(new FileHandle{ path });
+  const bool bReadOnly = (mode == RETRO_VFS_FILE_ACCESS_READ);
+
+  // Resolve reads across the frontend's system layers. A write is left alone:
+  // it belongs in the writable layer the core was given, not in whichever layer
+  // happens to hold an existing copy -- a resource add-on's contents are not
+  // the core's to modify.
+  std::string resolvedPath = path;
+  if (bReadOnly)
+    resolvedPath = CLibretroEnvironment::Get().Resources().ResolveSystemPath(resolvedPath);
+
+  std::unique_ptr<FileHandle> fileHandle(new FileHandle{ resolvedPath });
   fileHandle->file.reset(new kodi::vfs::CFile);
 
-  const bool bReadOnly = (mode == RETRO_VFS_FILE_ACCESS_READ);
   if (bReadOnly)
   {
     unsigned int flags = 0;
