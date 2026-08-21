@@ -725,6 +725,18 @@ GAME_ERROR CGameLibRetro::GetCheevoUrlId(
   return GAME_ERROR_NOT_IMPLEMENTED;
 }
 
+GAME_ERROR CGameLibRetro::RCSetHardcoreEnabled(bool enabled)
+{
+  CCheevos::Get().SetHardcoreEnabled(enabled);
+  return GAME_ERROR_NO_ERROR;
+}
+
+GAME_ERROR CGameLibRetro::RCSetEncoreModeEnabled(bool enabled)
+{
+  CCheevos::Get().SetEncoreModeEnabled(enabled);
+  return GAME_ERROR_NO_ERROR;
+}
+
 GAME_ERROR CGameLibRetro::RCResetRuntime()
 {
   return GAME_ERROR_NOT_IMPLEMENTED;

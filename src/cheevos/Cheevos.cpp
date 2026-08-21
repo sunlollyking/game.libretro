@@ -156,7 +156,11 @@ void CCheevos::Initialize(kodi::addon::CInstanceGame* gameInstance,
   }
 
   rc_client_set_event_handler(m_rcClient, RcheevosEventHandler);
-  rc_client_set_hardcore_enabled(m_rcClient, 0);
+
+  // rc_client is recreated for each game, but the frontend only pushes these
+  // when the settings change, so reapply what it last told us
+  rc_client_set_hardcore_enabled(m_rcClient, m_hardcoreEnabled ? 1 : 0);
+  rc_client_set_encore_mode_enabled(m_rcClient, m_encoreModeEnabled ? 1 : 0);
 
   {
     char clause[RA_USER_AGENT_CLAUSE_SIZE]{};
@@ -315,6 +319,30 @@ void CCheevos::DoFrame()
     m_framesSincePublish = 0;
     PublishAchievementProgress();
   }
+}
+
+void CCheevos::SetHardcoreEnabled(bool enabled)
+{
+  m_hardcoreEnabled = enabled;
+
+  if (m_rcClient == nullptr)
+    return;
+
+  // rc_client raises RC_CLIENT_EVENT_RESET from inside this call when hardcore
+  // is switched on, which is forwarded to the frontend
+  rc_client_set_hardcore_enabled(m_rcClient, enabled ? 1 : 0);
+  kodi::Log(ADDON_LOG_INFO, "CCheevos: hardcore mode %s", enabled ? "enabled" : "disabled");
+}
+
+void CCheevos::SetEncoreModeEnabled(bool enabled)
+{
+  m_encoreModeEnabled = enabled;
+
+  if (m_rcClient == nullptr)
+    return;
+
+  rc_client_set_encore_mode_enabled(m_rcClient, enabled ? 1 : 0);
+  kodi::Log(ADDON_LOG_INFO, "CCheevos: encore mode %s", enabled ? "enabled" : "disabled");
 }
 
 void CCheevos::PublishAchievementProgress()
@@ -642,6 +670,45 @@ void CCheevos::RcheevosEventHandler(const rc_client_event_t* event, rc_client_t*
     {
       kodi::Log(ADDON_LOG_WARNING, "CCheevos: disconnected from RetroAchievements");
       s_instance->m_gameInstance->KodiRCOnConnectionChanged(false);
+      break;
+    }
+    case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_SHOW:
+    case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_HIDE:
+    {
+      const rc_client_achievement_t* ach = event->achievement;
+      if (ach != nullptr)
+      {
+        const bool show = (event->type == RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_SHOW);
+
+        game_rc_achievement_challenge data{};
+        data.id = ach->id;
+        data.title = ach->title;
+        data.badge_url = ach->badge_url;
+
+        s_instance->m_gameInstance->KodiRCOnChallengeIndicator(data, show);
+      }
+      break;
+    }
+    case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_HIDE:
+    {
+      // The achievement stopped reporting progress. Republish so the frontend's
+      // snapshot drops it rather than showing a bar that no longer applies.
+      s_instance->PublishAchievementProgress();
+      break;
+    }
+    case RC_CLIENT_EVENT_SUBSET_COMPLETED:
+    {
+      const rc_client_subset_t* subset = event->subset;
+      const char* title = (subset != nullptr && subset->title != nullptr) ? subset->title : "";
+      s_instance->m_gameInstance->KodiRCOnSubsetCompleted(title);
+      break;
+    }
+    case RC_CLIENT_EVENT_RESET:
+    {
+      // Raised when hardcore is enabled: RetroAchievements does not allow a
+      // session started in casual mode to continue into hardcore
+      kodi::Log(ADDON_LOG_INFO, "CCheevos: runtime requested a reset");
+      s_instance->m_gameInstance->KodiRCOnReset();
       break;
     }
     case RC_CLIENT_EVENT_RECONNECTED:
