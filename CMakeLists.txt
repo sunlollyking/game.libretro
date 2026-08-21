@@ -9,6 +9,20 @@ find_package(TinyXML REQUIRED)
 find_package(Rcheevos REQUIRED)
 add_definitions(-DRC_STATIC)
 
+# RetroAchievements identifies a client by its User-Agent, so the version sent
+# has to be this add-on's. At runtime kodi::addon::GetAddonInfo("version")
+# reports the *loaded* add-on, which is the core wrapper (game.libretro.genplus
+# and friends), so it changes depending on which core is playing. Read our own
+# version from addon.xml.in at configure time instead.
+file(READ ${PROJECT_SOURCE_DIR}/game.libretro/addon.xml.in ADDON_XML_CONTENTS)
+string(REGEX MATCH "<addon[^>]*version=\"([0-9][^\"]*)\"" _match "${ADDON_XML_CONTENTS}")
+set(GAME_LIBRETRO_VERSION "${CMAKE_MATCH_1}")
+if(NOT GAME_LIBRETRO_VERSION)
+  message(FATAL_ERROR "Could not read the add-on version from addon.xml.in")
+endif()
+message(STATUS "game.libretro version for RetroAchievements User-Agent: ${GAME_LIBRETRO_VERSION}")
+add_definitions(-DGAME_LIBRETRO_VERSION="${GAME_LIBRETRO_VERSION}")
+
 include_directories(${KODI_INCLUDE_DIR}
                     ${KODI_INCLUDE_DIR}/..
                     ${PROJECT_SOURCE_DIR}/src
