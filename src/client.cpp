@@ -254,7 +254,7 @@ GAME_ERROR CGameLibRetro::GetGameTiming(game_system_timing& timing_info)
   timing_info.sample_rate = retro_info.timing.sample_rate;
 
   // Report info to CLibretroEnvironment
-  CLibretroEnvironment::Get().UpdateVideoGeometry(retro_info.geometry);
+  CLibretroEnvironment::Get().UpdateVideoGeometry(retro_info.geometry, true);
   CLibretroEnvironment::Get().VideoTiming().SetFrameRate(retro_info.timing.fps);
 
   // The geometry the hardware rendering stream needs is now known, so bring the
