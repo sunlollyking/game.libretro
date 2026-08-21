@@ -162,9 +162,32 @@ void CCheevos::Initialize(kodi::addon::CInstanceGame* gameInstance,
     char clause[RA_USER_AGENT_CLAUSE_SIZE]{};
     rc_client_get_user_agent_clause(m_rcClient, clause, sizeof(clause));
 
-    std::string userAgent = std::string(RA_CLIENT_NAME) + "/" + kodi::addon::GetAddonInfo("version");
+    // RetroAchievements documents the format as
+    //   <product>/<product-version> (<system-information>) <extensions>
+    //
+    // The product is this add-on, and the version has to be this add-on's own,
+    // supplied at build time. kodi::addon::GetAddonInfo("version") reports the
+    // loaded add-on, which is the core wrapper, so using it here made the
+    // reported client version change depending on which core was playing.
+    //
+    // The core is still worth sending, as an extension - it tells the server
+    // which emulator is actually running - but it is not what identifies the
+    // client.
+    std::string userAgent = std::string(RA_CLIENT_NAME) + "/" + GAME_LIBRETRO_VERSION;
+
     if (clause[0] != '\0')
       userAgent += " " + std::string(clause);
+
+    const std::string coreName = kodi::addon::GetAddonInfo("name");
+    const std::string coreVersion = kodi::addon::GetAddonInfo("version");
+    if (!coreName.empty() && !coreVersion.empty())
+    {
+      // Spaces separate extensions, so a core name containing them would be
+      // read as several fields
+      std::string sanitizedName = coreName;
+      std::replace(sanitizedName.begin(), sanitizedName.end(), ' ', '-');
+      userAgent += " " + sanitizedName + "/" + coreVersion;
+    }
 
     std::lock_guard<std::mutex> lock(m_userAgentMutex);
     m_userAgent = std::move(userAgent);
