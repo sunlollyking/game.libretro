@@ -47,6 +47,19 @@ public:
   void DoFrame();
 
   /*!
+   * @brief Set whether achievements are earned in hardcore mode
+   *
+   * The frontend enforces the restrictions hardcore requires; this only tells
+   * rc_client which mode to award in. Enabling it makes rc_client raise a
+   * reset event, because RetroAchievements does not allow a session started in
+   * casual mode to continue into hardcore.
+   */
+  void SetHardcoreEnabled(bool enabled);
+
+  /// @brief Set whether already-earned achievements can trigger again
+  void SetEncoreModeEnabled(bool enabled);
+
+  /*!
    * @brief Send progress for every measured achievement to the frontend
    *
    * rc_client's progress-indicator events name a single achievement, but the
@@ -169,6 +182,11 @@ private:
 
   /// @brief Set during teardown so no further requests reach the network
   std::atomic<bool> m_shuttingDown{false};
+
+  // Remembered so the modes survive a game change, since rc_client is
+  // recreated per game but the frontend only pushes these when they change
+  std::atomic<bool> m_hardcoreEnabled{false};
+  std::atomic<bool> m_encoreModeEnabled{false};
 };
 
 } // namespace LIBRETRO
