@@ -55,5 +55,12 @@ namespace LIBRETRO
     GAME_STREAM_TYPE m_streamType = GAME_STREAM_UNKNOWN;
     GAME_PIXEL_FORMAT m_format = GAME_PIXEL_FORMAT_UNKNOWN; // Guard against libretro changing formats
     std::unique_ptr<game_stream_buffer> m_framebuffer;
+
+    // The maximum geometry the cached hardware framebuffer was asked for. Kept
+    // so a core that raises its maximum mid-game is noticed: the cached
+    // framebuffer is only ever fetched once, so without this it would keep
+    // rendering into storage sized for the old maximum.
+    unsigned int m_framebufferWidth = 0;
+    unsigned int m_framebufferHeight = 0;
   };
 }

@@ -51,7 +51,26 @@ void CVideoStream::SetGeometry(const CVideoGeometry &geometry)
   // longer refer to anything. Its framebuffer is sized from the maximum
   // geometry and grown on demand, so a new geometry needs no reopening at all.
   if (m_streamType != GAME_STREAM_HW_FRAMEBUFFER)
+  {
     CloseStream();
+  }
+  else if (m_framebuffer &&
+           (geometry.MaxWidth() > m_framebufferWidth ||
+            geometry.MaxHeight() > m_framebufferHeight))
+  {
+    // The framebuffer is fetched once and cached, so a core that raises its
+    // maximum would otherwise keep rendering into storage sized for the old
+    // one. Drop the cached buffer and let the next GetHwFramebuffer() ask for
+    // one at the new size; the frontend grows it on demand.
+    kodi::Log(ADDON_LOG_DEBUG,
+              "Core raised its maximum geometry to %ux%u, re-fetching the framebuffer",
+              geometry.MaxWidth(), geometry.MaxHeight());
+
+    m_stream.ReleaseBuffer(*m_framebuffer);
+    m_framebuffer.reset();
+    m_framebufferWidth = 0;
+    m_framebufferHeight = 0;
+  }
 
   *m_geometry = geometry;
 }
@@ -116,6 +135,8 @@ uintptr_t CVideoStream::GetHwFramebuffer()
       return 0;
 
     m_framebuffer = std::move(framebuffer);
+    m_framebufferWidth = width;
+    m_framebufferHeight = height;
   }
 
   return m_framebuffer->hw_framebuffer.framebuffer;
@@ -342,6 +363,8 @@ void CVideoStream::OnFrameEnd()
 
   m_stream.ReleaseBuffer(*m_framebuffer);
   m_framebuffer.reset();
+  m_framebufferWidth = 0;
+  m_framebufferHeight = 0;
 }
 
 void CVideoStream::CloseStream()
@@ -356,4 +379,6 @@ void CVideoStream::CloseStream()
   // a reopened stream - after a geometry change, say - asks for a new one at
   // the new size instead of rendering into a stale framebuffer.
   m_framebuffer.reset();
+  m_framebufferWidth = 0;
+  m_framebufferHeight = 0;
 }
