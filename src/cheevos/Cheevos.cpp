@@ -624,9 +624,30 @@ void CCheevos::RcheevosEventHandler(const rc_client_event_t *event,
   }
   case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_SHOW:
   case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_UPDATE: {
-    // rc_client reports one achievement at a time, but the frontend shows a
-    // snapshot of every measured achievement, so publish the whole set
+    // Two different things want this. The achievements dialog shows a snapshot
+    // of every measured achievement, so publish the whole set; the on-screen
+    // indicator shows the one the runtime picked out, so forward that too.
     s_instance->PublishAchievementProgress();
+
+    const rc_client_achievement_t *ach = event->achievement;
+    if (ach != nullptr) {
+      game_rc_achievement_progress_indicator data{};
+      data.id = ach->id;
+      data.title = ach->title;
+      data.badge_url = ach->badge_url;
+      data.measured_progress = ach->measured_progress;
+      data.measured_percent = ach->measured_percent;
+
+      kodi::Log(ADDON_LOG_DEBUG,
+                "CCheevos: progress indicator for achievement %u '%s' at %s (%.0f%%)",
+                ach->id, ach->title != nullptr ? ach->title : "",
+                ach->measured_progress, ach->measured_percent);
+
+      if (event->type == RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_UPDATE)
+        s_instance->m_gameInstance->KodiRCOnAchievementProgressUpdate(data);
+      else
+        s_instance->m_gameInstance->KodiRCOnAchievementProgressIndicator(data, true);
+    }
     break;
   }
   case RC_CLIENT_EVENT_SERVER_ERROR: {
@@ -672,6 +693,15 @@ void CCheevos::RcheevosEventHandler(const rc_client_event_t *event,
     // The achievement stopped reporting progress. Republish so the frontend's
     // snapshot drops it rather than showing a bar that no longer applies.
     s_instance->PublishAchievementProgress();
+
+    // rc_client may send no achievement with the hide, in which case an id of
+    // zero tells the frontend to clear whatever it is showing
+    game_rc_achievement_progress_indicator data{};
+    const rc_client_achievement_t *ach = event->achievement;
+    if (ach != nullptr)
+      data.id = ach->id;
+
+    s_instance->m_gameInstance->KodiRCOnAchievementProgressIndicator(data, false);
     break;
   }
   case RC_CLIENT_EVENT_SUBSET_COMPLETED: {
