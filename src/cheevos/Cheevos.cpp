@@ -659,6 +659,11 @@ void CCheevos::RcheevosEventHandler(const rc_client_event_t *event,
       data.title = ach->title;
       data.badge_url = ach->badge_url;
 
+      kodi::Log(ADDON_LOG_DEBUG,
+                "CCheevos: challenge indicator %s for achievement %u '%s'",
+                show ? "show" : "hide", ach->id,
+                ach->title != nullptr ? ach->title : "");
+
       s_instance->m_gameInstance->KodiRCOnChallengeIndicator(data, show);
     }
     break;
