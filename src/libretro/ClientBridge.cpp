@@ -76,7 +76,7 @@ GAME_ERROR CClientBridge::HwContextDestroy(void)
 GAME_ERROR CClientBridge::AudioEnable(bool enabled)
 {
   if (!m_retro_audio_set_state_callback)
-    return GAME_ERROR_FAILED;
+    return GAME_ERROR_NOT_IMPLEMENTED;
 
   m_retro_audio_set_state_callback(enabled);
 
@@ -99,7 +99,7 @@ GAME_ERROR CClientBridge::AudioAvailable(void)
 GAME_ERROR CClientBridge::FrameTime(int64_t usec)
 {
   if (!m_retro_frame_time_callback)
-    return GAME_ERROR_FAILED;
+    return GAME_ERROR_NOT_IMPLEMENTED;
 
   m_retro_frame_time_callback(usec);
 
