@@ -76,7 +76,7 @@ GAME_ERROR CClientBridge::HwContextDestroy(void)
 GAME_ERROR CClientBridge::AudioEnable(bool enabled)
 {
   if (!m_retro_audio_set_state_callback)
-    return GAME_ERROR_FAILED;
+    return GAME_ERROR_NOT_IMPLEMENTED;
 
   m_retro_audio_set_state_callback(enabled);
 
@@ -85,8 +85,12 @@ GAME_ERROR CClientBridge::AudioEnable(bool enabled)
 
 GAME_ERROR CClientBridge::AudioAvailable(void)
 {
+  // Not an error: a core that never registered the callback is simply on the
+  // ordinary synchronous audio path, which is most of them. Kodi asks this once
+  // per frame, so saying "failed" put an error in the log sixty times a second
+  // for every such core.
   if (!m_retro_audio_callback)
-    return GAME_ERROR_FAILED;
+    return GAME_ERROR_NOT_IMPLEMENTED;
 
   m_retro_audio_callback();
 
@@ -96,7 +100,7 @@ GAME_ERROR CClientBridge::AudioAvailable(void)
 GAME_ERROR CClientBridge::FrameTime(int64_t usec)
 {
   if (!m_retro_frame_time_callback)
-    return GAME_ERROR_FAILED;
+    return GAME_ERROR_NOT_IMPLEMENTED;
 
   m_retro_frame_time_callback(usec);
 
