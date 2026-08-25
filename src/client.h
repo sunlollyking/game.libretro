@@ -45,6 +45,7 @@ public:
   GAME_REGION GetRegion() override;
   bool RequiresGameLoop() override { return true; }
   GAME_ERROR RunFrame() override;
+  GAME_ERROR RunFrameSpeculative() override;
   GAME_ERROR Reset() override;
 
   // --- Hardware rendering operations -------------------------------------------
@@ -109,6 +110,13 @@ public:
 
 private:
   bool LoadGameInternal(const retro_game_info* gameInfo);
+
+  /*!
+   * \brief Advance the core by one frame
+   *
+   * \param processAchievements False for a frame the frontend will rewind past
+   */
+  void RunFrameInternal(bool processAchievements);
 
   LIBRETRO::Timer                         m_timer;
   LIBRETRO::CLibretroDLL                  m_client;
