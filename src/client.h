@@ -45,6 +45,7 @@ public:
   GAME_REGION GetRegion() override;
   bool RequiresGameLoop() override { return true; }
   GAME_ERROR RunFrame() override;
+  GAME_ERROR RunFrameSpeculative() override;
   GAME_ERROR Reset() override;
 
   // --- Hardware rendering operations
@@ -131,6 +132,15 @@ public:
 
 private:
   GAME_ERROR AudioAvailable() override;
+
+  /*!
+   * \brief Advance the core by one frame
+   *
+   * \param processAchievements Whether to let the achievement runtime see it.
+   *        False for a frame the frontend is going to rewind past, whose
+   *        announcements would be about a frame that never really happened.
+   */
+  void RunFrameInternal(bool processAchievements);
 
   LIBRETRO::Timer m_timer;
   LIBRETRO::CLibretroDLL m_client;

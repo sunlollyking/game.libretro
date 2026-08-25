@@ -296,6 +296,23 @@ GAME_REGION CGameLibRetro::GetRegion() {
 }
 
 GAME_ERROR CGameLibRetro::RunFrame() {
+  RunFrameInternal(true);
+
+  return GAME_ERROR_NO_ERROR;
+}
+
+GAME_ERROR CGameLibRetro::RunFrameSpeculative() {
+  // The frontend is about to rewind past this frame, so run the core and
+  // nothing else. The achievement runtime is the reason this exists: driven by
+  // a frame that gets taken back, it announces challenges starting and ending
+  // and unlocks achievements for a frame that never really happened, and those
+  // announcements have already left by the time the state is restored.
+  RunFrameInternal(false);
+
+  return GAME_ERROR_NO_ERROR;
+}
+
+void CGameLibRetro::RunFrameInternal(bool processAchievements) {
   // Trigger the frame time callback before running the core.
   uint64_t current = m_timer.microseconds();
   int64_t delta = 0;
@@ -319,11 +336,10 @@ GAME_ERROR CGameLibRetro::RunFrame() {
 
   m_client.retro_run();
 
-  CCheevos::Get().DoFrame();
+  if (processAchievements)
+    CCheevos::Get().DoFrame();
 
   CLibretroEnvironment::Get().OnFrameEnd();
-
-  return GAME_ERROR_NO_ERROR;
 }
 
 GAME_ERROR CGameLibRetro::Reset() {
