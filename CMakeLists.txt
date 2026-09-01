@@ -133,6 +133,14 @@ check_struct_has_member("AddonToKodiFuncTable_Game"
                         HAVE_GAME_RC_INDICATORS
                         LANGUAGE CXX)
 
+# The frontend gains the encore-mode call in the same version, detected the same
+# way and for the same reason.
+check_struct_has_member("KodiToAddonFuncTable_Game"
+                        RCSetEncoreModeEnabled
+                        "${KODI_INCLUDE_DIR}/c-api/addon-instance/game.h"
+                        HAVE_GAME_RC_ENCORE_MODE
+                        LANGUAGE CXX)
+
 build_addon(${PROJECT_NAME} LIBRETRO DEPLIBS)
 
 if(HAVE_GAME_HW_FRAMEBUFFER_SIZE)
@@ -141,6 +149,10 @@ endif()
 
 if(HAVE_GAME_RC_INDICATORS)
   target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_GAME_RC_INDICATORS)
+endif()
+
+if(HAVE_GAME_RC_ENCORE_MODE)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_GAME_RC_ENCORE_MODE)
 endif()
 
 if(ENABLE_INTERNAL_LIBRETROCOMMON)
