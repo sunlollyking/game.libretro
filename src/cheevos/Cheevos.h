@@ -47,6 +47,21 @@ public:
   /// @brief Store credentials from Kodi (called before LoadGame)
   void SetCredentials(const std::string& username, const std::string& token);
 
+  /*!
+   * @brief Set whether achievements are earned in hardcore mode
+   *
+   * The frontend enforces the restrictions hardcore requires; this only tells
+   * the runtime, which will not let a session started in casual mode continue
+   * into hardcore.
+   */
+  void SetHardcoreEnabled(bool enabled);
+
+  //! @brief Set whether already-earned achievements can be earned again
+  void SetEncoreModeEnabled(bool enabled);
+
+  //! @brief Whether hardcore is on, for callers that must refuse what it forbids
+  bool IsHardcoreEnabled() const { return m_hardcoreEnabled; }
+
   /// @brief Called every emulated frame from RunFrame()
   void DoFrame();
 
@@ -159,6 +174,8 @@ private:
   // Identifies this add-on to RetroAchievements, built once in Initialize()
   std::string m_userAgent;
   mutable std::mutex m_userAgentMutex;
+  std::atomic<bool> m_hardcoreEnabled{false};
+  std::atomic<bool> m_encoreModeEnabled{false};
   std::atomic<bool> m_loginStarted{false};
   bool m_loginRetryScheduled{false};
   unsigned int m_loginRetryDelaySeconds{0};

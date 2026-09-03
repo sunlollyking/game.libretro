@@ -511,6 +511,15 @@ GAME_ERROR CGameLibRetro::DeserializeAchievements(const uint8_t* data, size_t si
 
 GAME_ERROR CGameLibRetro::CheatReset()
 {
+  // Guarded here rather than in the frontend. This is the last point before
+  // the core, and RetroAchievements forbids cheats in hardcore, so refusing
+  // here holds whatever the frontend grows later.
+  if (CCheevos::Get().IsHardcoreEnabled())
+  {
+    kodi::Log(ADDON_LOG_INFO, "Refusing to reset cheats in hardcore mode");
+    return GAME_ERROR_REJECTED;
+  }
+
   m_client.retro_cheat_reset();
 
   return GAME_ERROR_NO_ERROR;
@@ -526,8 +535,28 @@ GAME_ERROR CGameLibRetro::GetMemory(GAME_MEMORY type, uint8_t*& data, size_t& si
 
 GAME_ERROR CGameLibRetro::SetCheat(unsigned int index, bool enabled, const std::string& code)
 {
+  // See CheatReset(): hardcore forbids cheats, and the refusal belongs on this
+  // side of the boundary so no frontend change can get past it
+  if (CCheevos::Get().IsHardcoreEnabled())
+  {
+    kodi::Log(ADDON_LOG_INFO, "Refusing to set a cheat in hardcore mode");
+    return GAME_ERROR_REJECTED;
+  }
+
   m_client.retro_cheat_set(index, enabled, code.c_str());
 
+  return GAME_ERROR_NO_ERROR;
+}
+
+GAME_ERROR CGameLibRetro::RCSetHardcoreEnabled(bool enabled)
+{
+  CCheevos::Get().SetHardcoreEnabled(enabled);
+  return GAME_ERROR_NO_ERROR;
+}
+
+GAME_ERROR CGameLibRetro::RCSetEncoreModeEnabled(bool enabled)
+{
+  CCheevos::Get().SetEncoreModeEnabled(enabled);
   return GAME_ERROR_NO_ERROR;
 }
 

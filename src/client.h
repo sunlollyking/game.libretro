@@ -78,6 +78,8 @@ public:
   GAME_ERROR SetCheat(unsigned int index, bool enabled, const std::string& code) override;
 
   // --- RCheevos ----------------------------------------------------------------
+  GAME_ERROR RCSetHardcoreEnabled(bool enabled) override;
+  GAME_ERROR RCSetEncoreModeEnabled(bool enabled) override;
   GAME_ERROR SetRetroAchievementsCredentials(const std::string& username, const std::string& token) override;
   GAME_ERROR ActivateAchievement(unsigned cheevo_id, const std::string& memAddrExpression) override;
   GAME_ERROR GetCheevoUrlId(const std::function<void(const std::string& achievementUrl,
