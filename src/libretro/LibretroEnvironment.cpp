@@ -86,9 +86,19 @@ void CLibretroEnvironment::CloseStreams()
   m_audioStream.Deinitialize();
 }
 
-void CLibretroEnvironment::UpdateVideoGeometry(const retro_game_geometry &geometry)
+void CLibretroEnvironment::UpdateVideoGeometry(const retro_game_geometry &geometry,
+                                               bool bAllowMaximumChange)
 {
   CVideoGeometry videoGeometry(geometry);
+
+  // SET_GEOMETRY exists so a core can change the size it draws without the
+  // reinitialisation SET_SYSTEM_AV_INFO causes, and libretro.h is explicit that
+  // its max_width and max_height are ignored. Honouring them would resize the
+  // framebuffer behind a call whose whole purpose is not to.
+  if (!bAllowMaximumChange)
+    videoGeometry.SetMaximum(m_videoStream.Geometry().MaxWidth(),
+                             m_videoStream.Geometry().MaxHeight());
+
   m_videoStream.SetGeometry(videoGeometry);
 }
 
@@ -430,7 +440,7 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
       if (!typedData)
         return false;
 
-      UpdateVideoGeometry(typedData->geometry);
+      UpdateVideoGeometry(typedData->geometry, true);
 
       const double fps = typedData->timing.fps;
       const double sampleRate = typedData->timing.sample_rate;
@@ -487,7 +497,7 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
     const retro_game_geometry* typedData = static_cast<const retro_game_geometry*>(data);
     if (typedData)
     {
-      UpdateVideoGeometry(*typedData);
+      UpdateVideoGeometry(*typedData, false);
     }
     break;
   }
