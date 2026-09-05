@@ -23,6 +23,24 @@ using namespace LIBRETRO;
 
 namespace LIBRETRO
 {
+  // RetroArch-private environment commands. They are not in libretro.h, but
+  // cores ask for them anyway, so the values have to be spelled out here.
+  #define RETRO_ENVIRONMENT_RETROARCH_START_BLOCK 0x800000
+  #define RETRO_ENVIRONMENT_GET_CLEAR_ALL_THREAD_WAITS_CB (3 | RETRO_ENVIRONMENT_RETROARCH_START_BLOCK)
+
+  /*!
+   * \brief Release any of the frontend's blocking waits so a core can join its threads
+   *
+   * Nothing here blocks a core's threads, so there is nothing to release. It
+   * still has to exist: a core that runs its emulator in a thread stores this
+   * pointer and calls it while unloading without checking it, so leaving it
+   * unset crashes the core on the way out.
+   */
+  bool ClearAllThreadWaits(unsigned /* clearState */, void* /* data */)
+  {
+    return true;
+  }
+
   bool EnvCallback(unsigned cmd, void* data)
   {
     return CLibretroEnvironment::Get().EnvironmentCallback(cmd, data);
@@ -257,7 +275,19 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
 
         // Now that hooks are installed, enable HW rendering in the frontend
         if (!m_addon->EnableHardwareRendering(hw_info))
+        {
+          // The frontend cannot render this context type on the display stack
+          // it has. Returning false leaves the core to fall back to software,
+          // so put back everything set up above -- the stream especially, which
+          // would otherwise go on to open a framebuffer that has just been
+          // refused, and close the game part-way through the core's startup.
+          m_videoStream.DisableHardwareRendering();
+          m_clientBridge->SetHwContextReset(nullptr);
+          m_clientBridge->SetHwContextDestroy(nullptr);
+          typedData->get_current_framebuffer = nullptr;
+          typedData->get_proc_address = nullptr;
           return false;
+        }
       }
       break;
     }
@@ -616,6 +646,14 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
 
       *typedData = quirks;
     }
+    break;
+  }
+  case RETRO_ENVIRONMENT_GET_CLEAR_ALL_THREAD_WAITS_CB:
+  {
+    retro_environment_t* typedData = static_cast<retro_environment_t*>(data);
+    if (typedData)
+      *typedData = ClearAllThreadWaits;
+
     break;
   }
   case RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT:
