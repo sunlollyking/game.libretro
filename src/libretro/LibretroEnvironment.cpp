@@ -661,20 +661,15 @@ bool CLibretroEnvironment::EnvironmentCallback(unsigned int cmd, void *data)
     // Parameter is ignored
     (void)data;
 
-    // Declined. This asks for a context the core may create further contexts
-    // from, on its own threads, which Kodi has no way to hand out. It is not
-    // the same thing as the context Kodi creates for hardware rendering, which
-    // does share Kodi's objects and is unaffected by this answer.
+    // The core creates these itself, from whatever context is current on the
+    // thread it asks on, so there is nothing to hand it: the context Kodi makes
+    // current for hardware rendering already shares Kodi's objects, and one
+    // created from it joins the same share group.
     //
-    // Logged because cores warn about the refusal in terms that read like a
-    // failure of the hardware rendering setup. It is not: a core that asks for
-    // this loses whatever it wanted the extra contexts for, typically
-    // compiling shaders on a worker thread, and renders normally without them.
-    kodi::Log(ADDON_LOG_DEBUG,
-              "Core asked to create its own contexts (SET_HW_SHARED_CONTEXT); declined, the "
-              "frontend cannot provide them. Hardware rendering is unaffected.");
-
-    return false;
+    // A core that is refused loses whatever it wanted them for -- Dolphin
+    // compiles shaders on worker threads and falls back to compiling them on
+    // the thread that draws, which stutters and can change what it renders.
+    return true;
   }
   case RETRO_ENVIRONMENT_GET_VFS_INTERFACE:
   {
