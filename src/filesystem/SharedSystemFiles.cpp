@@ -135,7 +135,8 @@ void CSharedSystemFiles::Copy(const std::vector<std::string>& resourceDirectorie
   {
     const std::string system =
         CFilesystemUtils::CoreDirectory(Join(directory, LIBRETRO_SYSTEM_DIRECTORY_NAME));
-    if (system != sharedDirectory)
+    // Most emulators ship none, and Kodi logs an error for a missing folder
+    if (system != sharedDirectory && kodi::vfs::DirectoryExists(system))
       ListFiles(system, "", files);
   }
 
